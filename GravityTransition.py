@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 
 class GravityTransition:
     def __init__(self, num_locations, num_customer_classes, beta=2, region_size=1000, counter_range=(1, 3), service_time_range=(5/60, 15/60)):
@@ -88,19 +91,33 @@ class GravityTransition:
         pd.DataFrame(transition_matrix).to_csv(filename, index=False, header=False)
         return transition_matrix
 
-    def plot_locations(self, filename="locations.png"):
+    def plot_locations(self, num_counters ,filename="locations.png"):
         """拠点の位置をプロット"""
         plt.figure(figsize=(8, 8))
-        plt.scatter(self.locations[:, 0], self.locations[:, 1], c='blue', s=100, label="Locations")
+        # カラーマップの定義 (窓口数の範囲に対応)
+        unique_counters = sorted(set(num_counters))  # 窓口数のユニーク値を取得
+        cmap = cm.get_cmap('viridis', len(unique_counters))  # 色をユニーク数に合わせて分割
+        norm = mcolors.Normalize(vmin=min(unique_counters), vmax=max(unique_counters))  # 正規化
+        colors = [cmap(norm(c)) for c in unique_counters]  # 各窓口数に対応する色
+
+        # 拠点のプロット (色は窓口数に対応)
+        scatter = plt.scatter(self.locations[:, 0], self.locations[:, 1], 
+                            c=num_counters, cmap=cmap, s=100, norm=norm)
+        
         for i, (x, y) in enumerate(self.locations):
-            plt.text(x, y, str(i), fontsize=9, ha='right')
+            plt.text(x + 10, y + 15, str(i), fontsize=9, ha='right')
+
+        # 凡例の作成
+        legend_patches = [mpatches.Patch(color=colors[i], label=f"Counter: {unique_counters[i]}") 
+                        for i in range(len(unique_counters))]
+        plt.legend(handles=legend_patches, title="Number of Counters", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.)
+
         plt.xlim(0, self.region_size)
         plt.ylim(0, self.region_size)
         plt.xlabel("X Coordinate")
         plt.ylabel("Y Coordinate")
         plt.title("Locations of Facilities")
-        plt.legend()
-        plt.savefig(filename)
+        plt.savefig(filename, bbox_inches="tight")
         plt.close()
 
     def plot_weights(self, filename="weights.png"):
@@ -174,8 +191,13 @@ if __name__ == "__main__":
     rows, cols = transition_matrix.shape
     print(f"Transition Matrix: {rows} rows, {cols} columns")
 
+    # 窓口数とサービス率を取得
+    num_counters, service_rates = model.get_counters_and_service_rates()
+    print("窓口数:", num_counters)
+    print("サービス率:", service_rates)
+
     # 拠点位置をプロットし保存
-    model.plot_locations()
+    model.plot_locations(num_counters)
 
     # 人気度をプロットし保存
     model.plot_weights()
@@ -183,7 +205,3 @@ if __name__ == "__main__":
     # 拠点の位置と人気度を保存
     model.save_locations_and_weights("locations_and_weights.csv")
 
-    # 窓口数とサービス率を取得
-    num_counters, service_rates = model.get_counters_and_service_rates()
-    print("窓口数:", num_counters)
-    print("サービス率:", service_rates)
