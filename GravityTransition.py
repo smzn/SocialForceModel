@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 class GravityTransition:
-    def __init__(self, num_locations, num_customer_classes, beta=2, region_size=1000):
+    def __init__(self, num_locations, num_customer_classes, beta=2, region_size=1000, counter_range=(1, 3), service_time_range=(5/60, 15/60)):
         """
         初期化メソッド
 
@@ -26,6 +26,10 @@ class GravityTransition:
 
         # 距離行列を計算
         self.distance_matrix = self._calculate_distance_matrix()
+
+        # 窓口数とサービス率の初期化
+        self.num_counters = self._generate_num_counters(counter_range)
+        self.service_rates = self._calculate_service_rates(service_time_range)
 
     def _generate_locations(self):
         """拠点位置をランダムに生成（距離の分散を確保）"""
@@ -127,7 +131,9 @@ class GravityTransition:
         data = {
             "Location ID": np.arange(self.num_locations),
             "X Coordinate": self.locations[:, 0],
-            "Y Coordinate": self.locations[:, 1]
+            "Y Coordinate": self.locations[:, 1],
+            "Num Counters": self.num_counters,
+            "Service Rate": self.service_rates
         }
 
         for c in range(self.num_customer_classes):
@@ -135,6 +141,25 @@ class GravityTransition:
 
         df = pd.DataFrame(data)
         df.to_csv(filename, index=False)
+
+    def _generate_num_counters(self, counter_range):
+        """窓口数 (1~3) をランダムに生成"""
+        return np.random.randint(counter_range[0], counter_range[1]+1, size=self.num_locations)
+
+    def _calculate_service_rates(self, service_time_range):
+        """平均サービス時間からサービス率を計算"""
+        avg_service_times = np.random.uniform(service_time_range[0], service_time_range[1], size=self.num_locations)  # 5分～15分
+        return 1 / avg_service_times  # サービス率 = 1 / 平均サービス時間
+    
+    def get_counters_and_service_rates(self):
+        """
+        窓口数とサービス率をリストとして返す
+
+        Returns:
+        - num_counters: 窓口数リスト
+        - service_rates: サービス率リスト
+        """
+        return self.num_counters, self.service_rates
 
 
 # 動作確認
@@ -157,3 +182,8 @@ if __name__ == "__main__":
 
     # 拠点の位置と人気度を保存
     model.save_locations_and_weights("locations_and_weights.csv")
+
+    # 窓口数とサービス率を取得
+    num_counters, service_rates = model.get_counters_and_service_rates()
+    print("窓口数:", num_counters)
+    print("サービス率:", service_rates)
