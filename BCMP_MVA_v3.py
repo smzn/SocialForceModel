@@ -3,6 +3,7 @@ from numpy.linalg import solve
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 class BCMP_MVA:
     
@@ -216,6 +217,121 @@ class BCMP_MVA:
         plt.savefig(graph_filepath)
         print(f"平均系内人数の積み上げグラフを {graph_filepath} に保存しました。")
 
+    def plot_mean_L_with_weights(self, L, num_counters, locations, region_size=1000, filename="mean_L_with_weights.png"):
+        """拠点の位置と平均系内人数の2D等高線表示"""
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # カラーマップの定義 (白黒用)
+        #contour_cmap = "Greys"
+        # カラーマップの定義 (濃淡をより強調するカラーマップを選択)
+        contour_cmap = "hot"
+
+        # 平均系内人数の等高線を計算
+        x = np.linspace(0, region_size, 300)
+        y = np.linspace(0, region_size, 300)
+        xx, yy = np.meshgrid(x, y)
+        mean_L_grid = np.zeros_like(xx)
+
+        # 各拠点の影響を平均系内人数として加算
+        for i, (loc_x, loc_y) in enumerate(locations):
+            distances = np.sqrt((xx - loc_x)**2 + (yy - loc_y)**2)
+            influence = np.sum(L[i, :]) / (1 + distances)  # 距離に反比例した影響
+            mean_L_grid += influence
+
+        # 等高線の描画
+        contour = ax.contour(xx, yy, mean_L_grid, levels=150, cmap=contour_cmap, linewidths=1.0, alpha=0.5)
+        ax.clabel(contour, inline=True, fontsize=10, fmt="%1.1f")  # ラベルを追加して濃淡を明確化
+
+        # 拠点のプロット (形状は窓口数に対応、色は平均系内人数に対応)
+        scatter_shapes = ['o', 's', '^', 'D', '*']  # 窓口数に対応する形状
+        unique_counters = sorted(set(num_counters))
+        scatter_cmap = plt.cm.viridis
+        norm = mcolors.Normalize(vmin=min(np.sum(L, axis=1)), vmax=max(np.sum(L, axis=1)))
+
+        for i, (x, y) in enumerate(locations):
+            shape_idx = unique_counters.index(num_counters[i]) % len(scatter_shapes)
+            ax.scatter(x, y, c=[np.sum(L[i, :])], cmap=scatter_cmap, s=100, norm=norm, zorder=5, marker=scatter_shapes[shape_idx])
+            ax.text(x + 10, y + 15, str(i), fontsize=9, ha='right', zorder=6)
+
+        # カラーバーの追加 (修正箇所)
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=scatter_cmap)
+        sm.set_array([])  # mappable に空のデータを設定
+        cbar = fig.colorbar(sm, ax=ax, label="Average Customers in System", orientation='horizontal', pad=0.1)
+
+        # 凡例の追加 (窓口数の形状)
+        legend_handles = [plt.Line2D([0], [0], marker=scatter_shapes[i % len(scatter_shapes)], color='w', markerfacecolor='gray', markersize=10, label=f'{counter} Counters') for i, counter in enumerate(unique_counters)]
+        legend = ax.legend(handles=legend_handles, title="Number of Counters", loc="upper left", bbox_to_anchor=(1.05, 1), borderaxespad=0., fontsize=10, title_fontsize=10)
+
+        # 正方形のアスペクト比を維持
+        #ax.set_aspect('equal', adjustable='datalim')
+
+        ax.set_xlim(0, region_size)
+        ax.set_ylim(0, region_size)
+        ax.set_xlabel("X Coordinate")
+        ax.set_ylabel("Y Coordinate")
+        ax.set_title("Locations with Mean Number of Customers in System")
+
+        # レイアウト調整 (カラーバーと凡例のために余白を確保)
+        plt.tight_layout(rect=[0, 0, 0.85, 1])
+
+        plt.savefig(filename, bbox_inches="tight")
+        plt.close()
+
+    def plot_mean_L_with_weights_3d(self, L, num_counters, locations, region_size=1000, filename="mean_L_with_weights_3d.png"):
+        """拠点の位置と平均系内人数の3D等高線表示"""
+        from mpl_toolkits.mplot3d import Axes3D
+
+        fig = plt.figure(figsize=(12, 10))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # 平均系内人数の3Dグリッドを計算
+        x = np.linspace(0, region_size, 300)
+        y = np.linspace(0, region_size, 300)
+        xx, yy = np.meshgrid(x, y)
+        mean_L_grid = np.zeros_like(xx)
+
+        # 各拠点の影響を平均系内人数として加算
+        for i, (loc_x, loc_y) in enumerate(locations):
+            distances = np.sqrt((xx - loc_x)**2 + (yy - loc_y)**2)
+            influence = np.sum(L[i, :]) / (1 + distances)  # 距離に反比例した影響
+            mean_L_grid += influence
+
+        # 3Dサーフェスの描画
+        surf = ax.plot_surface(xx, yy, mean_L_grid, cmap="viridis", edgecolor='k', alpha=0.2)
+
+        # 拠点のプロット (形状は窓口数に対応、色は平均系内人数に対応)
+        scatter_shapes = ['o', 's', '^', 'D', '*']  # 窓口数に対応する形状
+        unique_counters = sorted(set(num_counters))
+        scatter_cmap = plt.cm.viridis
+        norm = mcolors.Normalize(vmin=min(np.sum(L, axis=1)), vmax=max(np.sum(L, axis=1)))
+
+        for i, (x, y) in enumerate(locations):
+            shape_idx = unique_counters.index(num_counters[i]) % len(scatter_shapes)
+            ax.scatter(x, y, 0, c=[np.sum(L[i, :])], cmap=scatter_cmap, s=100, norm=norm, zorder=5, marker=scatter_shapes[shape_idx])
+            ax.text(x, y, 0, str(i), fontsize=9, ha='center', zorder=6)
+
+        # カラーバーの追加
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=scatter_cmap)
+        sm.set_array([])  # mappable に空のデータを設定
+        #cbar = fig.colorbar(sm, ax=ax, shrink=0.5, aspect=10, pad=0.1, label="Average Customers in System")
+        cbar = fig.colorbar(sm, ax=ax, orientation='horizontal', shrink=0.5, pad=0.1, label="Average Customers in System")
+
+        # 窓口数の凡例を追加 (右上領域外)
+        legend_handles = [plt.Line2D([0], [0], marker=scatter_shapes[i % len(scatter_shapes)], color='w', markerfacecolor='gray', markersize=10, label=f'{counter} Counters') for i, counter in enumerate(unique_counters)]
+        ax.legend(handles=legend_handles, title="Number of Counters", loc="upper left", bbox_to_anchor=(1.05, 1.0), borderaxespad=0., fontsize=8, title_fontsize=10)
+
+
+        # ラベルとタイトルの設定
+        ax.set_xlabel("X Coordinate")
+        ax.set_ylabel("Y Coordinate")
+        ax.set_zlabel("Mean Number of Customers")
+        ax.set_title("Locations with Mean Number of Customers in System (3D)")
+
+        # レイアウト調整と保存
+        plt.tight_layout()
+        plt.savefig(filename, bbox_inches="tight")
+        plt.close()
+
 
 if __name__ == '__main__':
     
@@ -240,3 +356,4 @@ if __name__ == '__main__':
     # 結果を保存
     output_filepath = "mean_L.csv"  # 保存するCSVファイルのパス
     bcmp.save_mean_L_to_csv(L, output_filepath)
+

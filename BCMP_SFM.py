@@ -8,7 +8,8 @@ import time
 # インスタンス作成
 num_locations=33
 num_customer_classes=2
-model = GravityTransition(num_locations, num_customer_classes)
+region_size=1000
+model = GravityTransition(num_locations, num_customer_classes, region_size)
 
 # 推移確率行列を作成し保存
 transition_matrix = model.save_transition_matrix()
@@ -31,6 +32,14 @@ model.plot_weights()
 # 拠点の位置と人気度を保存
 model.save_locations_and_weights("locations_and_weights.csv")
 
+#拠点の位置をプロットし、人気度の等高線を追加
+model.plot_locations_with_weights(num_counters)
+
+#拠点の位置を3次元で山の高さとして表示
+model.plot_3d_locations_with_weights(num_counters)
+
+#拠点位置の取得
+locations = model.get_locations()
 
 # 2. BCMP_MVAによる平均系内人数(理論値の計算)
 # 推移確率をリスト形式に変換 (BCMP_MVA用)
@@ -50,3 +59,8 @@ elapsed_time = time.time() - start
 print ("calclation_time:{0}".format(elapsed_time) + "[sec]")
 print('L = \n{0}'.format(L))
 bcmp.save_mean_L_to_csv(L, "mean_L.csv")
+bcmp.plot_mean_L_with_weights(L, num_counters, locations) #拠点の位置と平均系内人数の2D等高線表示
+bcmp.plot_mean_L_with_weights_3d(L, num_counters, locations)#拠点の位置と平均系内人数の3D表示
+
+
+
