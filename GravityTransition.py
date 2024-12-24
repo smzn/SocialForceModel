@@ -137,6 +137,97 @@ class GravityTransition:
         plt.savefig(filename)
         plt.close()
 
+    def plot_locations_with_weights(self, num_counters, filename="locations_with_weights.png"):
+        """拠点の位置をプロットし、人気度の等高線を追加"""
+        plt.figure(figsize=(8, 8))  # 正方形の比率に変更
+
+        # カラーマップの定義 (白黒用)
+        contour_cmap = "Greys"  # 白黒のカラーマップ
+
+        # 人気度の等高線を計算
+        x = np.linspace(0, self.region_size, 300)  # 格子点をさらに増やす
+        y = np.linspace(0, self.region_size, 300)
+        xx, yy = np.meshgrid(x, y)
+        popularity_grid = np.zeros_like(xx)
+
+        # 各拠点の影響を人気度として加算
+        for i, (loc_x, loc_y) in enumerate(self.locations):
+            distances = np.sqrt((xx - loc_x)**2 + (yy - loc_y)**2)
+            influence = self.weights.sum(axis=0)[i] / (1 + distances)  # 距離に反比例した影響
+            popularity_grid += influence
+
+        # 等高線の描画 (線をさらに濃く)
+        contour = plt.contour(xx, yy, popularity_grid, levels=150, cmap=contour_cmap, linewidths=2.5, alpha=1.0)
+
+        # 拠点のプロット (色は窓口数に対応)
+        unique_counters = sorted(set(num_counters))  # 窓口数のユニーク値を取得
+        scatter_cmap = plt.cm.viridis  # カラーマップを定義
+        norm = mcolors.Normalize(vmin=min(unique_counters), vmax=max(unique_counters))
+
+        for i, (x, y) in enumerate(self.locations):
+            plt.scatter(x, y, c=[num_counters[i]], cmap=scatter_cmap, s=100, norm=norm, zorder=5)  # マーカーを小さくして色分け
+            plt.text(x + 10, y + 15, str(i), fontsize=9, ha='right', zorder=6)
+
+        # 窓口数の凡例を対応で表示
+        legend_patches = [mpatches.Patch(color=scatter_cmap(norm(c)), label=f"Counter: {c}") 
+                           for c in unique_counters]
+        plt.legend(handles=legend_patches, title="Number of Counters", bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.)
+
+        plt.xlim(0, self.region_size)
+        plt.ylim(0, self.region_size)
+        plt.xlabel("X Coordinate")
+        plt.ylabel("Y Coordinate")
+        plt.title("Locations of Facilities with Popularity Contours")
+        plt.savefig(filename, bbox_inches="tight")
+        plt.close()
+
+    def plot_3d_locations_with_weights(self, num_counters, filename="3d_locations_with_weights.png"):
+        """拠点の位置を3次元で山の高さとして表示"""
+        from mpl_toolkits.mplot3d import Axes3D
+
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # 3Dグリッドの計算
+        x = np.linspace(0, self.region_size, 300)  # 格子点をさらに増やす
+        y = np.linspace(0, self.region_size, 300)
+        xx, yy = np.meshgrid(x, y)
+        popularity_grid = np.zeros_like(xx)
+
+        # 各拠点の影響を人気度として加算
+        for i, (loc_x, loc_y) in enumerate(self.locations):
+            distances = np.sqrt((xx - loc_x)**2 + (yy - loc_y)**2)
+            influence = self.weights.sum(axis=0)[i] / (1 + distances)  # 距離に反比例した影響
+            popularity_grid += influence
+
+        # 3Dプロットの描画
+        ax.plot_surface(xx, yy, popularity_grid, cmap="viridis", edgecolor='k', alpha=0.3)
+
+        # 拠点のプロット (色は窓口数に対応)
+        unique_counters = sorted(set(num_counters))  # 窓口数のユニーク値を取得
+        scatter_cmap = plt.cm.viridis  # カラーマップを定義
+        norm = mcolors.Normalize(vmin=min(unique_counters), vmax=max(unique_counters))
+
+        for i, (x, y) in enumerate(self.locations):
+            ax.scatter(x, y, 0, c=[num_counters[i]], cmap=scatter_cmap, s=50, norm=norm, edgecolor="black", zorder=5)
+            ax.text(x, y, 0, str(i), fontsize=8, ha='center', zorder=6)
+
+        # ラベルとタイトル
+        ax.set_xlabel("X Coordinate")
+        ax.set_ylabel("Y Coordinate")
+        ax.set_zlabel("Popularity Influence")
+        ax.set_title("3D Locations of Facilities with Popularity Heights")
+
+        # 凡例の追加
+        legend_patches = [mpatches.Patch(color=scatter_cmap(norm(c)), label=f"Counter: {c}")
+                           for c in unique_counters]
+        fig.legend(handles=legend_patches, title="Number of Counters", bbox_to_anchor=(1, 0.8), loc="upper left", borderaxespad=0.)
+
+        # ファイル保存
+        plt.savefig(filename, bbox_inches="tight")
+        plt.close()
+
+
     def save_locations_and_weights(self, filename="locations_and_weights.csv"):
         """
         拠点の場所と客クラスごとの人気度をCSVに保存
@@ -204,4 +295,11 @@ if __name__ == "__main__":
 
     # 拠点の位置と人気度を保存
     model.save_locations_and_weights("locations_and_weights.csv")
+
+    #拠点の位置をプロットし、人気度の等高線を追加
+    model.plot_locations_with_weights(num_counters)
+
+    #拠点の位置を3次元で山の高さとして表示
+    model.plot_3d_locations_with_weights(num_counters)
+
 
