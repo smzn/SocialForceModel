@@ -84,6 +84,8 @@ class BCMP_Simulation:
         """
         イベントドリブン型シミュレーションのメインループ
         """
+        start_time = time.time() # シミュレーション開始時間を記録
+
 
         # 初期設定
         self.initialize_simulation()
@@ -144,12 +146,17 @@ class BCMP_Simulation:
             elif next_event_details["event_type"] == "travel_complete":
                 self.process_travel_complete(next_event_details, current_time, delta_time)
 
-        print(f"Simulation completed. Total cumulative customers: {self.cumulative_customers}")
+        # シミュレーション終了時間を記録
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Simulation completed in {elapsed_time:.2f} seconds.")
+        #print(f"Simulation completed. Total cumulative customers: {self.cumulative_customers}")
+
         # シミュレーション終了時にログを保存
         self.save_log_to_csv()
         self.save_class_data_to_csv()
         self.save_extended_data_to_csv()
-        print(f"Simulation completed. Total cumulative customers: {self.cumulative_customers}")
+        #print(f"Simulation completed. Total cumulative customers: {self.cumulative_customers}")
 
         # シミュレーション終了後にグラフを作成
         self.plot_all_graphs()
@@ -161,6 +168,8 @@ class BCMP_Simulation:
 
         self.plot_mean_total_customers()  # 平均総系内人数
         self.plot_mean_in_system_customers()  # 平均系内人数
+
+        self.plot_boxplots() # ボックスプロットの生成
 
         self.calculate_and_save_rmse()  # RMSEの計算、保存、グラフ作成
         self.calculate_and_save_rmse_per_class()
@@ -1207,6 +1216,34 @@ class BCMP_Simulation:
         plt.savefig(graph_filename)
         plt.close()
         print(f"RMSE graph saved to {graph_filename}")
+
+    def plot_boxplots(self, output_file_in_system = "log/in_system_boxplot.png", output_file_total = "log/total_customers_boxplot.png"):
+        """
+        系内人数と総系内人数のボックスプロットを作成
+        """
+        # 系内人数のデータを取得
+        in_system_data = [self.in_system_customers_data[node] for node in range(self.N)]
+        total_data = [self.total_customers_data[node] for node in range(self.N)]
+
+        # 系内人数のボックスプロット
+        plt.figure(figsize=(10, 6))
+        plt.boxplot(in_system_data, tick_labels=[f"{i}" for i in range(self.N)])
+        plt.title("In-System Customers (Excluding Transit)")
+        plt.xlabel("Node")
+        plt.ylabel("Number of Customers")
+        plt.savefig(output_file_in_system)
+        plt.close()
+        print(f"Boxplot for In-System Customers saved as '{output_file_in_system}'.")
+
+        # 総系内人数のボックスプロット
+        plt.figure(figsize=(10, 6))
+        plt.boxplot(total_data, tick_labels=[f"{i}" for i in range(self.N)])
+        plt.title("Total Customers (Including Transit)")
+        plt.xlabel("Node")
+        plt.ylabel("Number of Customers")
+        plt.savefig(output_file_total)
+        plt.close()
+        print(f"Boxplot for Total Customers saved as '{output_file_total}'.")
 
 
 if __name__ == '__main__':
