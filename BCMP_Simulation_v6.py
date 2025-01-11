@@ -669,6 +669,8 @@ class BCMP_Simulation:
                 self.class_data["in_system_customers"][node][cls].append(in_system_customers)
                 self.class_data["in_transit_customers"][node][cls].append(in_transit_customers)
                 self.class_data["total_customers"][node][cls].append(total_customers)
+                # デバッグメッセージを挿入
+                #print(f"[DEBUG] Node {node}, Class {cls}: Total Customers Data = {self.class_data['total_customers'][node][cls]}")
 
     def update_extended_data(self, current_time, delta_time):
         """
@@ -769,6 +771,7 @@ class BCMP_Simulation:
     def calculate_rmse_summary(self):
         """
         拠点でクラスをまとめて比較した最終RMSEと最小RMSE、およびクラスごとに比較した最終RMSEと最小RMSEを計算して返す。
+        移動中の客を含みます (with transit)
         
         戻り値:
             tuple: (最終時刻の拠点ごとにクラスをまとめたRMSE,
@@ -814,6 +817,62 @@ class BCMP_Simulation:
                 min_squared_errors_class = []
                 for t_idx in range(len(self.times)):
                     sim_value_t = self.mean_total_class_data[node][cls][t_idx] if t_idx < len(self.mean_total_class_data[node][cls]) else 0
+                    min_squared_errors_class.append((sim_value_t - theoretical_value) ** 2)
+                min_class_squared_errors.append(min(min_squared_errors_class))  # 各クラスで最小値を記録
+
+        final_class_rmse = math.sqrt(sum(class_rmse_squared_errors) / (self.N * self.R))
+        min_class_rmse = math.sqrt(sum(min_class_squared_errors) / (self.N * self.R))
+
+        return final_total_rmse, final_class_rmse, min_total_rmse, min_class_rmse
+
+    def calculate_rmse_without_transit(self):
+        """
+        移動中の顧客を含まないRMSEを計算する。
+        
+        戻り値:
+            tuple: (最終時刻の拠点ごとにクラスをまとめたRMSE（移動中の顧客を含まない）,
+                    最終時刻のクラスごとのRMSE（移動中の顧客を含まない）,
+                    最小の拠点ごとにクラスをまとめたRMSE（移動中の顧客を含まない）,
+                    最小のクラスごとのRMSE（移動中の顧客を含まない）)
+        """
+        # 初期化
+        total_rmse_squared_errors = []  # 拠点ごとの平方誤差
+        min_total_squared_errors = []  # 各時刻での平方誤差（最小RMSE用）
+        class_rmse_squared_errors = []  # クラスごとの平方誤差
+        min_class_squared_errors = []  # 各時刻での平方誤差（最小RMSE用）
+
+        # 最終時刻の拠点ごとにクラスをまとめたRMSEを計算
+        for node in range(self.N):
+            simulated_total = sum(
+                self.mean_in_system_class_data[node][cls][-1] for cls in range(self.R)
+            )
+            theoretical_total = self.theoretical.iloc[node].sum()
+            total_rmse_squared_errors.append((simulated_total - theoretical_total) ** 2)
+
+            # 各時刻の平方誤差を収集（最小RMSE用）
+            min_squared_errors_node = []
+            for t_idx in range(len(self.times)):
+                simulated_total_t = sum(
+                    self.mean_in_system_class_data[node][cls][t_idx]
+                    for cls in range(self.R) if t_idx < len(self.mean_in_system_class_data[node][cls])
+                )
+                min_squared_errors_node.append((simulated_total_t - theoretical_total) ** 2)
+            min_total_squared_errors.append(min(min_squared_errors_node))  # 各ノードで最小値を記録
+
+        final_total_rmse = math.sqrt(sum(total_rmse_squared_errors) / self.N)
+        min_total_rmse = math.sqrt(sum(min_total_squared_errors) / self.N)
+
+        # 最終時刻のクラスごとのRMSEを計算
+        for node in range(self.N):
+            for cls in range(self.R):
+                simulated_value = self.mean_in_system_class_data[node][cls][-1]
+                theoretical_value = self.theoretical.iloc[node, cls]
+                class_rmse_squared_errors.append((simulated_value - theoretical_value) ** 2)
+
+                # 各時刻の平方誤差を収集（最小RMSE用）
+                min_squared_errors_class = []
+                for t_idx in range(len(self.times)):
+                    sim_value_t = self.mean_in_system_class_data[node][cls][t_idx] if t_idx < len(self.mean_in_system_class_data[node][cls]) else 0
                     min_squared_errors_class.append((sim_value_t - theoretical_value) ** 2)
                 min_class_squared_errors.append(min(min_squared_errors_class))  # 各クラスで最小値を記録
 
