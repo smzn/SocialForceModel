@@ -36,7 +36,7 @@ if __name__ == '__main__':
     bcmp.run_simulation()
 
     # RMSEの計算
-    final_total_rmse, final_class_rmse, min_total_rmse, min_class_rmse = bcmp.calculate_rmse_summary()
+    final_total_rmse, final_class_rmse = bcmp.calculate_rmse_summary()
 
     # 各プロセスが計算したRMSEをRank 0に送信
     local_rmse = final_total_rmse
@@ -57,19 +57,16 @@ if __name__ == '__main__':
     if rank == best_rank:
         bcmp.process_simulation_results()
         print(f"Process {rank}: Results saved.")
+        final_total_rmse, final_class_rmse = bcmp.calculate_rmse_summary()
         print(f"Process {rank} RMSE Summary (with transit):")
         print(f"  - Final Total RMSE (with transit): {final_total_rmse}")
         print(f"  - Final Class-wise RMSE (with transit): {final_class_rmse}")
-        print(f"  - Min Total RMSE (with transit): {min_total_rmse}")
-        print(f"  - Min Class-wise RMSE (with transit): {min_class_rmse}")
         
         # 移動中の顧客を含まないRMSE
-        final_total_rmse_without_transit, final_class_rmse_without_transit, min_total_rmse_without_transit, min_class_rmse_without_transit = bcmp.calculate_rmse_without_transit()        # 結果を表示
+        final_total_rmse_without_transit, final_class_rmse_without_transit = bcmp.calculate_rmse_without_transit()        # 結果を表示
         print(f"Without Transit:")
         print(f"  Final Total RMSE: {final_total_rmse_without_transit}")
         print(f"  Final Class-wise RMSE: {final_class_rmse_without_transit}")
-        print(f"  Min Total RMSE: {min_total_rmse_without_transit}")
-        print(f"  Min Class-wise RMSE: {min_class_rmse_without_transit}")
     else:
         print(f"Process {rank}: Skipping result saving.")
 
