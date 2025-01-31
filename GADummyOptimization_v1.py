@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import random
 from DummyProbabilityTranslation_v1 import DummyProbabilityTranslation
 from BCMP_MVA_v4 import BCMP_MVA
 
@@ -16,6 +17,8 @@ class GADummyOptimization:
         self.scores = np.zeros(npop)  # スコアを npop のサイズで初期化
         self.crosspb = crosspb
         self.mutpb = mutpb #突然変異率
+        self.best_solution = None # 最良解とスコアを初期化
+        self.best_score = float('inf')  # 最小化問題の場合は無限大で初期化（最大化なら -float('inf')）
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
         self.sim_df_no_transit = pd.read_csv(sim_file_path_no_transit, usecols=['Class0', 'Class1'])
@@ -107,44 +110,80 @@ class GADummyOptimization:
 
     def evolve_population(self):
         """
-        次世代の遺伝子プールを生成する。
+        次世代の集団を生成する。
+        通常拠点（前半 N 個）は固定し、ダミーノード（後半 N 個）のみを進化させる。
         """
         new_population = []
-        for _ in range(self.npop // 2):
-            # トーナメント選択
-            p1, p2 = self.selection(), self.selection()
-            # 交叉と突然変異
-            c1, c2 = self.crossover(p1, p2)
-            self.mutation(c1)
-            self.mutation(c2)
-            new_population.extend([c1, c2])
+        
+        # 既存の設定を利用
+        num_nodes = self.num_nodes_with_dummy  # ダミーノードを含むノード数
+        num_service_nodes = self.N             # 通常拠点の数（最初の N 個は固定）
+        population_size = self.npop            # 個体数
+        crossover_rate = self.crosspb          # 交叉確率
+        mutation_rate = self.mutpb             # 突然変異率
+        lower_bound = self.lower_bound         # サービス率の下限値
+        upper_bound = self.upper_bound         # サービス率の上限値
+
+        for _ in range(population_size):
+            # 親個体を選択
+            parent1, parent2 = self.select_parents()
+
+            # 子個体の生成（交叉）
+            child = self.crossover(parent1, parent2, crossover_rate)
+
+            # 突然変異の適用
+            child = self.mutate(child, mutation_rate, lower_bound, upper_bound)
+
+            # 通常拠点（前半 N 個）のサービス率を固定
+            child[:num_service_nodes] = parent1[:num_service_nodes]
+
+            # 新しい個体を次世代集団に追加
+            new_population.append(child)
+
         return new_population
 
-    def selection(self, k=3):
+    def select_parents(self):
         """
-        トーナメント選択: 最良の遺伝子を選択する。
+        親個体を選択する。トーナメント選択を使用。
         """
-        indices = np.random.randint(0, self.npop, k)
-        best_idx = indices[np.argmin([self.scores[i] for i in indices])]
-        return self.pool[best_idx]
+        tournament_size = 3
 
-    def crossover(self, p1, p2):
-        """
-        遺伝子交叉を行う。
-        """
-        if np.random.rand() < self.crosspb:
-            pt = np.random.randint(1, self.N - 1)
-            return np.concatenate([p1[:pt], p2[pt:]]), np.concatenate([p2[:pt], p1[pt:]])
-        return p1.copy(), p2.copy()
+        # ランダムに候補個体のインデックスを選択
+        candidate_indices1 = random.sample(range(self.npop), tournament_size)
+        candidate_indices2 = random.sample(range(self.npop), tournament_size)
 
-    def mutation(self, individual):
-        """
-        遺伝子突然変異を行う。
-        """
-        for i in range(len(individual)):
-            if np.random.rand() < self.mutpb:
-                individual[i] = np.random.randint(1, self.U + 1)
+        # 各候補インデックスのスコアを基に親個体を選択
+        selected1_idx = min(candidate_indices1, key=lambda idx: self.scores[idx])
+        selected2_idx = min(candidate_indices2, key=lambda idx: self.scores[idx])
 
+        # 選択された個体を返す
+        return self.pool[selected1_idx], self.pool[selected2_idx]
+
+    def crossover(self, parent1, parent2, crossover_rate):
+        """
+        交叉を実行する。一定確率で親個体を交叉させ、子個体を生成する。
+        """
+        if np.random.rand() < crossover_rate:
+            num_nodes = len(parent1)
+            # ダミーノード（後半部分）の一様交叉（ランダムに親1または親2を選択）
+            child = parent1.copy()
+            for i in range(self.N, num_nodes):
+                if np.random.rand() < 0.5:
+                    child[i] = parent2[i]
+            return child
+        else:
+            return parent1.copy()
+
+    def mutate(self, individual, mutation_rate, lower_bound, upper_bound):
+        """
+        突然変異を実行する。一定確率でダミーノード部分に突然変異を加える。
+        """
+        for i in range(self.N, len(individual)):
+            if np.random.rand() < mutation_rate:
+                # 下限値と上限値の間でランダムなサービス率に変更
+                individual[i] = np.random.uniform(lower_bound, upper_bound)
+        return individual
+                
     def run(self):
         """
         遺伝的アルゴリズムを実行する。
@@ -157,7 +196,7 @@ class GADummyOptimization:
             self.evaluate_population()
             print('各遺伝子の評価値: {0}'.format(self.scores))
 
-            '''
+            
             # 最良遺伝子の更新
             best_gen_idx = np.argmin(self.scores)
             if self.scores[best_gen_idx] < self.best_score:
@@ -165,11 +204,20 @@ class GADummyOptimization:
                 self.best_score = self.scores[best_gen_idx]
                 print(f"New best found: {self.best_score}")
 
-            # 次世代の生成
-            self.pool = self.evolve_population()
+            # エリート保存: 最良遺伝子を次世代に引き継ぐ
+            elite = self.pool[best_gen_idx]
 
+            # 次世代の生成
+            next_generation = self.evolve_population()
+            next_generation[0] = elite  # エリート遺伝子を次世代の最初に配置
+            # 次世代遺伝子を表示（確認のため）
+            print("\n次世代の遺伝子集団:")
+            for idx, individual in enumerate(next_generation):
+                print(f"個体 {idx + 1}: {individual}")
+            self.pool = next_generation
+            
         return self.best_solution, self.best_score
-        '''
+        
             
     def calculate_rmse(self, sim_values, theoretical_values):
         """
@@ -290,7 +338,56 @@ class GADummyOptimization:
 
         return overall_rmse
 
+    def save_results(self):
+        """
+        最良遺伝子、スコア、平均系内人数を計算・表示・保存する。
+        """
+        # 最良遺伝子とスコアを取得
+        best_solution = self.best_solution
+        best_score = self.best_score
 
+        # サービス率の分割（通常拠点とダミーノード）
+        service_rate_normal = best_solution[:self.N]  # 通常拠点のサービス率
+        service_rate_dummy = best_solution[self.N:]   # ダミーノードのサービス率
+
+        # 平均系内人数を計算
+        bcmp = BCMP_MVA(self.num_nodes_with_dummy, self.R, self.K, self.best_solution, self.type_list, self.expanded_transition_matrix, self.counters_list)
+        L = bcmp.getMVA()
+
+        # 結果を表示
+        print("\n--- 遺伝アルゴリズム最終結果 ---")
+        print(f"最良スコア (RMSE値): {best_score}")
+        print("最良遺伝子（サービス率）:")
+        print("通常拠点:", service_rate_normal)
+        print("ダミーノード:", service_rate_dummy)
+        print("平均系内人数:", L)
+
+        # 平均系内人数 L を Pandas DataFrame に変換する
+        average_queue_lengths_df = pd.DataFrame(L, columns=[f'クラス{r}' for r in range(L.shape[1])])
+
+        # 拠点番号を追加
+        average_queue_lengths_df.insert(0, '拠点番号', list(range(L.shape[0])))
+
+        # サービス率のデータフレームも同様に作成
+        service_rate_df = pd.DataFrame({
+            '拠点番号': list(range(len(best_solution))),
+            'サービス率': best_solution
+        })
+
+        # サービス率と平均系内人数をマージして最終結果のデータフレームを作成
+        results_df = service_rate_df.merge(average_queue_lengths_df, on='拠点番号')
+
+        # メタ情報（RMSE、遺伝子数、世代数）を保存
+        metadata_df = pd.DataFrame({
+            '指標': ['RMSE', '遺伝子数', '世代数'],
+            '値': [best_score, self.npop, self.ngen]
+        })
+
+        # データフレームをCSVに保存
+        results_df.to_csv('genetic_algorithm_results.csv', index=False, encoding='utf-8-sig')
+        metadata_df.to_csv('genetic_algorithm_metadata.csv', index=False, encoding='utf-8-sig')
+
+        print("\n結果が 'genetic_algorithm_results.csv', 'genetic_algorithm_metadata.csv' に保存されました。")
 
 
 if __name__ == '__main__':
@@ -311,10 +408,5 @@ if __name__ == '__main__':
 
     dummy_optimization = GADummyOptimization(num_nodes, num_classes, K_total, npop, ngen, crosspb, mutpb, lower_bound, upper_bound, transition_file_path, servicerate_file_path, sim_file_path_no_transit, sim_file_path_with_transit)
     dummy_optimization.run() #遺伝アルゴリズムの実施
+    dummy_optimization.save_results()
 
-    '''
-    # 初期遺伝子プール確認
-    print("\nInitial Population:")
-    for i, individual in enumerate(dummy_optimization.pool):
-        print(f"Individual {i}: {individual}")
-    '''
